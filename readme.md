@@ -4,7 +4,7 @@ Recovery of Deleted Data and Associated Metadata from XFS and Btrfs Filesystems
 
 ## Overview
 
-MetaRecoverX is a Linux-focused data recovery and analysis tool designed to retrieve deleted files and reconstruct their associated metadata from XFS and Btrfs filesystems. It scans low-level filesystem structures (e.g., superblocks, allocation groups, inodes, metadata logs/trees) to accurately recover file content along with timestamps, ownership, and original directory hierarchy. The tool supports both raw disk images and live USB / removable drives, and is intended to assist digital forensics and system administration workflows.
+MetaRecoverX is a Linux-focused data recovery and analysis tool designed to retrieve deleted files and reconstruct their associated metadata from XFS and Btrfs filesystems. It scans low-level filesystem structures (e.g., superblocks, allocation groups, inodes, metadata logs/trees) to accurately recover file content along with timestamps, ownership, and original directory hierarchy. The tool is intended to assist digital forensics and system administration workflows.
 
 Institute: Swami Keshvanand Institute of Technology, Management & Gramothan (SKIT), Jaipur  
 Department: Information Technology  
@@ -12,17 +12,10 @@ Academic Session: 2025–2026
 
 ## Key Features
 
-- Low-level sequential block scanning of XFS and Btrfs internals for robust recovery
-- **Real XFS inode parsing** — detects inode magic (0x494E), extracts mode/uid/gid/size, decodes 128-bit packed extent records
-- **Real Btrfs leaf-node parsing** — reads `INODE_ITEM` (type 1), `INODE_REF` (type 12), and `DIR_ITEM` (type 84) keys for filename and metadata recovery
-- **Directory entry reconstruction** — correlates inode numbers with filenames from XFS dir-data blocks and Btrfs DIR_ITEM / INODE_REF records
-- **Filename-preserving recovery** — `recover_csv` writes `recovered/<original_filename>` when known; falls back to `file_NNNN.bin`
-- CSV output: `fs,inode,path,size,uid,gid,mode,extents` per recovered entry
-- USB / removable-drive support: detect, forensically image, hash, and recover in one command
-- Automatic filesystem detection via `blkid` (XFS, Btrfs, or both)
-- 64-bit file-offset support (`fseeko` + `_FILE_OFFSET_BITS=64`) for images and devices larger than 2 GB
-- `uint64_t` offsets throughout the scan loop — safe for images > 100 GB
-- Fully offline — no internet connection required at any stage
+- Low-level scanning of XFS and Btrfs internals for robust recovery
+- Recovery of deleted files, carved from freed extents where possible
+- Metadata reconstruction (timestamps, UID/GID, permissions, and path)
+- Reporting pipeline for exportable evidence (planned: HTML/CSV)
 - Validation against sample disk images
 
 ## Filesystems and Structures Scanned
@@ -40,42 +33,19 @@ Academic Session: 2025–2026
 ## Architecture and Modules
 
 1. Disk Image Acquisition
-	- Acquire disk images and verify integrity (SHA-256 hashing)
+	- Acquire disk images and verify integrity (hashing)
 
-2. USB / Removable Device Scanner (`scripts/detect_usb.sh`)
-	- Detect connected USB drives via `lsblk`
-	- Forensically image the selected device with `dd`
-	- Auto-detect filesystem type with `blkid`
+2. XFS Scanner
+	- Parse superblock and AGs, enumerate inodes and freed extents
 
-3. XFS Scanner (`xfs_scan`)
-	- Sequential 4096-byte block scan with `uint64_t` offsets — safe for >100 GB images
-	- Detects XFS superblock (magic `XFSB`) to extract block size and inode size
-	- Detects inode magic (`0x494E` = "IN") at every inode-size boundary
-	- Parses `xfs_dinode_core`: mode, uid, gid, di_size, di_nextents (v2 and v3 inodes)
-	- Decodes 128-bit packed extent records (startblock, blockcount, unwritten flag)
-	- Scans XFS directory data blocks (magic `XD2D` / `XD3B`) for `xfs_dir2_data_entry` records
-	- Correlates inode numbers with filenames; outputs `fs,inode,path,size,uid,gid,mode,extents`
-	- Accepts raw image files and block devices (`/dev/sdX`)
+3. Btrfs Scanner
+	- Traverse chunk/extent/inode trees, locate deleted items and snapshots
 
-4. Btrfs Scanner (`btrfs_scan`)
-	- Sequential 4096-byte block scan with `uint64_t` offsets — safe for >100 GB images
-	- Reads Btrfs superblock at offset 65536 to extract FSID, nodesize, sectorsize
-	- Identifies leaf nodes (`level == 0`) by header inspection; verifies FSID when known
-	- Parses `INODE_ITEM` (key type 1): extracts size, uid, gid, mode from 160-byte structure
-	- Parses `INODE_REF` (key type 12): extracts filename and parent directory mapping
-	- Parses `DIR_ITEM` / `DIR_INDEX` (key types 84/96): maps child inode → filename
-	- Correlates filenames with inode records; outputs `fs,inode,path,size,uid,gid,mode,extents`
-	- Accepts raw image files and block devices (`/dev/sdX`)
-
-5. Metadata Reconstruction (`reconstruct_csv`)
+4. Metadata Reconstruction
 	- Rebuild timestamps, UID/GID, permissions, and original directory paths
-	- Merges XFS and Btrfs scan CSVs into a unified `metadata.json` / `metadata.csv`
 
-6. Recovery Engine (`recover_csv`)
-	- Reassembles files from extents using 64-bit-safe `fseeko` I/O
-	- **Preserves original filenames**: writes `recovered/<basename>` when path is known
-	- Falls back to sequential naming (`file_0001.bin`, `file_0002.bin`, …) when path is unknown
-	- Accepts both disk image files and block devices as the image source
+5. Recovery Engine
+	- Reassemble files from extents and verify integrity
 
 ## Technology Stack
 
@@ -96,14 +66,8 @@ chmod +x scripts/*.sh
 # Build all C++ tools (uses CMake if present; falls back to g++)
 ./scripts/setup.sh
 
-# Run the full pipeline on a disk image
+# Run the full pipeline on your disk image
 ./scripts/metarecoverx.sh pipeline --image /path/to/disk.img
-
-# List connected USB drives
-./scripts/detect_usb.sh
-
-# Forensically image a USB drive and run the full recovery pipeline
-sudo ./scripts/metarecoverx.sh pipeline-usb --device /dev/sdb
 
 # Or run a tiny self-contained demo (creates a 1MiB dummy image)
 ./scripts/run_demo.sh
@@ -125,12 +89,7 @@ Outputs:
 
 ```
 core/               # C++ tools: xfs_scan, btrfs_scan, reconstruct_csv, recover_csv
-scripts/
-    build.sh        # Build all binaries (CMake or g++ fallback)
-    setup.sh        # One-step build helper
-    metarecoverx.sh # Main wrapper: pipeline, pipeline-usb, detect-usb, …
-    detect_usb.sh   # List connected USB storage devices
-    run_demo.sh     # Self-contained demo
+scripts/            # Build and demo scripts (Ubuntu TTY, offline)
 tests/              # Test images, fixtures, and automated tests (future)
 docs/               # Additional technical docs
 ```
@@ -196,89 +155,6 @@ Native Windows (without WSL) is not officially supported by the shell scripts. T
 - Permission denied: Ensure you’re running from a writable directory and that the `scripts/*.sh` files are executable.
 - Binary locations: Binaries are written to `build/`. Some generators (CMake/MSVC) may create `build/Release/` — the wrapper accounts for that by calling `scripts/build.sh` and then referencing `build/` outputs.
 
----
-
-## USB / Pendrive Recovery Support
-
-MetaRecoverX can forensically image and recover deleted data from USB pendrives and removable drives in addition to existing disk image files.
-
-### How it works
-
-1. **Detect** connected USB drives using `lsblk`.
-2. **Acquire** a forensic raw image from the selected device using `dd`.
-3. **Hash** the image with SHA-256 to preserve chain of custody.
-4. **Auto-detect** the filesystem type (`xfs` / `btrfs`) via `blkid`.
-5. **Scan → Reconstruct → Recover** through the standard pipeline.
-
-### Listing connected USB drives
-
-```bash
-./scripts/detect_usb.sh
-```
-
-Example output:
-
-```
-NAME  TRAN  SIZE  MOUNTPOINT
-----  ----  ----  ----------
-sdb   usb   32G
-sdc   usb   64G
-```
-
-Or through the main wrapper:
-
-```bash
-./scripts/metarecoverx.sh detect-usb
-```
-
-### Running the USB pipeline (requires root for dd)
-
-```bash
-# Identify your device first
-./scripts/detect_usb.sh
-
-# Run the full forensic pipeline on /dev/sdb
-sudo ./scripts/metarecoverx.sh pipeline-usb --device /dev/sdb
-```
-
-What happens internally:
-
-```
-[1/6] Build C++ binaries
-[2/6] dd if=/dev/sdb of=artifacts/usb_sdb_<timestamp>.img bs=4M status=progress
-[3/6] sha256sum  →  artifacts/hash.txt
-[4/6] Write artifacts/acquire.json
-[5/6] blkid detect FS → run xfs_scan or btrfs_scan (or both)
-[6/6] reconstruct_csv + recover_csv  →  recovered/
-```
-
-### Output layout (USB pipeline)
-
-```
-artifacts/
-    usb_sdb_<timestamp>.img   ← forensic image
-    hash.txt                  ← SHA-256 of the image
-    acquire.json              ← acquisition metadata
-    xfs_scan.csv              ← (if XFS or unknown FS)
-    btrfs_scan.csv            ← (if Btrfs or unknown FS)
-    metadata.json
-    metadata.csv
-recovered/
-    file_1.bin
-    file_2.bin
-report.csv
-```
-
-### Notes
-
-- Running `dd` on a block device requires **root** (`sudo`).
-- The `blkid` utility (part of `util-linux`) is used for filesystem auto-detection; if unavailable, both XFS and Btrfs scanners are run.
-- `xfs_scan` and `btrfs_scan` now accept block devices (`/dev/sdX`) directly in addition to image files, using `ioctl(BLKGETSIZE64)` to query the device size.
-- `recover_csv` uses `fseeko` with 64-bit `off_t` to handle images larger than 2 GB.
-- All steps are **offline** — no internet connection required.
-
----
-
 ## Project Plan and Milestones (2025)
 
 Dates reflect the academic plan and are subject to refinement during implementation.
@@ -308,12 +184,6 @@ Mentors / Faculty:
 ## Status
 
 - As of 2025-11-03: Offline C++ stubs for `xfs_scan` and `btrfs_scan` plus `reconstruct_csv` and `recover_csv` are available. Python/Rust/jq dependencies removed to support no-internet TTY operation.
-- As of 2026-03-12 (USB support): USB / removable-drive support added (`detect_usb.sh`, `pipeline-usb`, `detect-usb` commands; `blkid`-based FS detection; `ioctl(BLKGETSIZE64)` for block devices; 64-bit `fseeko` in `recover_csv`).
-- As of 2026-03-12 (real scanners): `xfs_scan` and `btrfs_scan` upgraded from stubs to real block-level scanners:
-  - **XFS**: parses inode magic, `xfs_dinode_core` (mode/uid/gid/size/extents), and `xfs_dir2_data_entry` directory records.
-  - **Btrfs**: reads superblock at offset 65536, identifies leaf nodes, parses `INODE_ITEM`, `INODE_REF`, `DIR_ITEM`, and `DIR_INDEX` keys.
-  - **recover_csv**: writes recovered files using their original basename; falls back to `file_NNNN.bin`.
-  - CSV column header updated to `fs,inode,path,size,uid,gid,mode,extents`.
 
 ## Contributing
 
