@@ -1,0 +1,6 @@
+/home/archtry/Downloads/report/btrfs/build/CMakeFiles/xfs_scan.dir
+/home/archtry/Downloads/report/btrfs/build/CMakeFiles/btrfs_scan.dir
+/home/archtry/Downloads/report/btrfs/build/CMakeFiles/reconstruct_csv.dir
+/home/archtry/Downloads/report/btrfs/build/CMakeFiles/recover_csv.dir
+/home/archtry/Downloads/report/btrfs/build/CMakeFiles/edit_cache.dir
+/home/archtry/Downloads/report/btrfs/build/CMakeFiles/rebuild_cache.dir

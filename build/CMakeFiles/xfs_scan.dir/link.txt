@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/xfs_scan.dir/src/xfs_scan.cpp.o -o xfs_scan 

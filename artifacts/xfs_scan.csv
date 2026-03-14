@@ -1,0 +1,2 @@
+fs,inode,path,size,uid,gid,mode,extents
+xfs,xfs-0001,,4096,,,,0:4096

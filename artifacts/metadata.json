@@ -1,0 +1,29 @@
+{
+  "schema": "metarecoverx.metadata.v1",
+  "sources": ["/home/archtry/Downloads/report/btrfs/artifacts/btrfs_scan.csv","/home/archtry/Downloads/report/btrfs/artifacts/xfs_scan.csv"],
+  "generated_at": "now",
+  "items": [
+    {
+      "global_id": "btrfs-btrfs-0001",
+      "fs": "btrfs",
+      "path": null,
+      "size": 8192,
+      "timestamps": {"ctime": null, "mtime": null, "atime": null, "crtime": null},
+      "uid": null, "gid": null, "mode": null,
+      "extents": [{"start": 0, "length": 8192}],
+      "recovery_plan": "carve",
+      "notes": null
+    },
+    {
+      "global_id": "xfs-xfs-0001",
+      "fs": "xfs",
+      "path": null,
+      "size": 4096,
+      "timestamps": {"ctime": null, "mtime": null, "atime": null, "crtime": null},
+      "uid": null, "gid": null, "mode": null,
+      "extents": [{"start": 0, "length": 4096}],
+      "recovery_plan": "carve",
+      "notes": null
+    }
+  ]
+}
