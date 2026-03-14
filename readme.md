@@ -1,452 +1,523 @@
 # MetaRecoverX
 
-Recovery of Deleted Data and Associated Metadata from XFS and Btrfs Filesystems
+**Recovery of Deleted Data and Associated Metadata from XFS and Btrfs Filesystems**
 
-## Overview
+MetaRecoverX is a Linux digital forensics and data recovery tool designed to recover deleted files and reconstruct their associated metadata from XFS and Btrfs filesystems. It scans low-level filesystem structures — including inodes, allocation groups, metadata logs, and filesystem trees — to accurately restore lost data along with critical metadata such as filenames, directory paths, file sizes, timestamps, UID/GID, permissions, and file extents.
 
-MetaRecoverX is a Linux-focused data recovery and analysis tool designed to retrieve deleted files and reconstruct their associated metadata from XFS and Btrfs filesystems. It scans low-level filesystem structures (e.g., superblocks, allocation groups, inodes, metadata logs/trees) to accurately recover file content along with timestamps, ownership, and original directory hierarchy. The tool is intended to assist digital forensics and system administration workflows.
+The tool runs **fully offline** in Ubuntu / Linux TTY environments, making it suitable for digital forensics, incident response, and system administration workflows.
 
-Institute: Swami Keshvanand Institute of Technology, Management & Gramothan (SKIT), Jaipur  
-Department: Information Technology  
-Academic Session: 2025–2026
+---
+
+## Project Information
+
+- **Institute:** Swami Keshvanand Institute of Technology, Management & Gramothan (SKIT), Jaipur
+- **Department:** Information Technology
+- **Academic Session:** 2025–2026
+- **Team Name:** Tech-Aizen
+
+### Team Members
+
+| Member | Roll No. | Role |
+|---|---|---|
+| Mayank Tak | 22ESKIT093 | Lead Developer — XFS module, recovery engine, reporting |
+| Lucky Panchal | 22ESKIT088 | Btrfs module, testing, and integration |
+| Milan Kumar | 22ESKIT094 | Metadata reconstruction pipeline, QA, and tooling |
+
+### Faculty Mentors
+
+- Mr. Jagendra Singh Chaudhary — Assistant Professor (II)
+- Ms. Richa Rawal — Assistant Professor (I), Lab Coordinator
+
+---
 
 ## Key Features
 
-- Low-level scanning of XFS and Btrfs internals for robust recovery
-- Recovery of deleted files, carved from freed extents where possible
-- Metadata reconstruction (timestamps, UID/GID, permissions, and path)
-- Reporting pipeline for exportable evidence (planned: HTML/CSV)
-- Validation against sample disk images
+- Recovery of deleted files from **XFS** filesystems
+- Recovery of deleted files from **Btrfs** filesystems
+- **Metadata reconstruction** — filenames, directory paths, timestamps, UID/GID, permissions
+- **Extent-based file recovery** — reassemble files from disk extents and verify integrity
+- **Disk image analysis** — full pipeline on raw disk images (`.img`)
+- **USB / pendrive forensic acquisition** — image USB drives with `dd`, hash with SHA-256
+- **Filesystem auto-detection** — uses `blkid` to determine XFS vs Btrfs
+- **SHA-256 hashing** for evidence integrity verification
+- Support for **large disk images** (>100 GB) using `uint64_t` offsets
+- **Fully offline execution** — no internet, no external libraries
+- **Reporting pipeline** — CSV and JSON metadata exports
 
-## Filesystems and Structures Scanned
+---
 
-- XFS
-  - Superblock, Allocation Groups (AGs)
-  - Inodes, B+Trees, metadata journals/logs
-  - Deleted inode/extent enumeration and carving
+## Supported Filesystems and Structures
 
-- Btrfs
-  - Chunk, Extent, and Inode trees
-  - Snapshot discovery and deleted item traversal
-  - Extent mapping for recovery
+### XFS
 
-## Architecture and Modules
+The XFS scanner detects and parses:
 
-1. Disk Image Acquisition
-	- Acquire disk images and verify integrity (hashing)
+- XFS superblock
+- Allocation groups (AGs)
+- Inode structures (including deleted inodes)
+- Directory entries (`xfs_dir2_data_entry`)
+- B+Trees and metadata journals/logs
+- Extent records (freed extents for carving)
 
-2. XFS Scanner
-	- Parse superblock and AGs, enumerate inodes and freed extents
+Recovered metadata: inode, filename, path, size, uid, gid, mode, extents.
 
-3. Btrfs Scanner
-	- Traverse chunk/extent/inode trees, locate deleted items and snapshots
+### Btrfs
 
-4. Metadata Reconstruction
-	- Rebuild timestamps, UID/GID, permissions, and original directory paths
+The Btrfs scanner parses:
 
-5. Recovery Engine
-	- Reassemble files from extents and verify integrity
+- Superblock
+- Chunk tree, Extent tree, Inode tree
+- FS tree (ROOT_TREE, FS_TREE)
+- INODE_ITEM, INODE_REF, DIR_ITEM
+- Snapshot discovery and deleted item traversal
+
+Recovered metadata: inode, filename, path, size, uid, gid, mode.
+
+---
 
 ## Technology Stack
 
-- C++17 (standalone binaries; planned: optional libxfs linking for XFS) — Linux
-- Bash + coreutils for orchestration (no internet required)
-- Test media: sample disk images for validation and QA
+| Technology | Version | Purpose |
+|---|---|---|
+| C++17 | GCC 9+ | Core binaries — filesystem parsing, low-level recovery |
+| Bash | System | Orchestration scripts (build, pipeline, demo, USB) |
+| POSIX APIs | — | Low-level I/O and system calls |
+| Linux coreutils | — | `dd`, `stat`, `sha256sum`, `readlink`/`realpath`, `blkid`, `lsblk` |
+| CMake (optional) | 3.10+ | Build system (falls back to direct `g++` if missing) |
+| Sample disk images | — | Validation and QA |
+
+**No external libraries, Python, Rust, or internet downloads are required.**
+
+---
+
+## Architecture and Modules
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    MetaRecoverX Pipeline                │
+├──────────────┬──────────────┬───────────────┬───────────┤
+│  1. Acquire  │  2. Scan     │ 3. Reconstruct│ 4. Recover│
+│  Disk Image  │  Filesystem  │   Metadata    │   Files   │
+│  (dd + hash) │  Structures  │   (CSV/JSON)  │ (extents) │
+└──────────────┴──────────────┴───────────────┴───────────┘
+```
+
+| Module | Binary | Description |
+|---|---|---|
+| Disk Image Acquisition | `dd` / `sha256sum` | Acquire disk images from devices, verify integrity with hashing |
+| XFS Scanner | `build/xfs_scan` | Parse XFS superblock, AGs, enumerate inodes & freed extents |
+| Btrfs Scanner | `build/btrfs_scan` | Traverse chunk/extent/inode trees, locate deleted items & snapshots |
+| Metadata Reconstruction | `build/reconstruct_csv` | Combine scan CSVs, rebuild timestamps, UID/GID, permissions, paths |
+| Recovery Engine | `build/recover_csv` | Reassemble files from extents, verify integrity, write to `recovered/` |
+
+---
+
+## Repository Structure
+
+```text
+MetaRecoverX/
+├── core/                           # C++ source code
+│   ├── CMakeLists.txt              # CMake build configuration
+│   └── src/
+│       ├── xfs_scan.cpp            # XFS filesystem scanner
+│       ├── btrfs_scan.cpp          # Btrfs filesystem scanner
+│       ├── reconstruct_csv.cpp     # Metadata reconstruction engine
+│       └── recover_csv.cpp         # File recovery engine
+│
+├── scripts/                        # Bash orchestration scripts
+│   ├── setup.sh                    # Build script (CMake → g++ fallback)
+│   ├── build.sh                    # Direct build wrapper
+│   ├── metarecoverx.sh            # Main pipeline script
+│   ├── detect_usb.sh              # USB device detection
+│   ├── run_demo.sh                # Quick demo runner
+│   └── menu.sh                    # Interactive TTY menu
+│
+├── build/                          # Compiled binaries (generated)
+│   ├── xfs_scan
+│   ├── btrfs_scan
+│   ├── reconstruct_csv
+│   └── recover_csv
+│
+├── artifacts/                      # Pipeline outputs (generated)
+│   ├── acquire.json               # Acquisition metadata (path, size, hash)
+│   ├── hash.txt                   # SHA-256 hash of disk image
+│   ├── xfs_scan.csv              # XFS scan results
+│   ├── btrfs_scan.csv            # Btrfs scan results
+│   ├── metadata.csv              # Unified metadata
+│   └── metadata.json             # Unified metadata (JSON)
+│
+├── recovered/                      # Recovered files (generated)
+│   ├── file.txt                   # (filename preserved when possible)
+│   ├── photo.jpg
+│   └── file_0001.bin              # (fallback name if unknown)
+│
+├── docs/                           # Additional technical documentation
+├── tests/                          # Test images, fixtures, automated tests
+├── dummy.img                       # 1 MiB test image for demo
+├── report.csv                      # Copy of metadata.csv for quick viewing
+└── Makefile                        # Top-level Makefile
+```
+
+---
 
 ## Getting Started
 
-This repository currently contains documentation. Implementation is in progress and will be published incrementally.
-
-### Quick start (Ubuntu TTY, offline)
-
-You only need a C++17 compiler and coreutils. No internet required.
-
-```
-chmod +x scripts/*.sh
-# Build all C++ tools (uses CMake if present; falls back to g++)
-./scripts/setup.sh
-
-# Run the full pipeline on your disk image
-./scripts/metarecoverx.sh pipeline --image /path/to/disk.img
-
-# Or run a tiny self-contained demo (creates a 1MiB dummy image)
-./scripts/run_demo.sh
-```
-
-Outputs:
-
-- `artifacts/` — scan CSVs and combined metadata JSON/CSV
-- `recovered/` — carved file blobs (`*.bin`)
-- `report.csv` — a copy of `artifacts/metadata.csv` for quick viewing
-
 ### Prerequisites (Ubuntu, offline)
 
-- Ubuntu (native or WSL) with a C++ compiler (g++)
-- Optional: CMake (for nicer builds); script falls back to g++ if missing
-- Optional: libxfs development headers (future XFS integration)
+- Ubuntu (native or WSL) with a C++17 compiler (`g++`)
+- Optional: CMake 3.10+ (for nicer builds; script falls back to `g++` if missing)
+- Optional: `libxfs` development headers (future XFS integration)
 
-### Repository Layout (offline-friendly)
+### Clone the Repository
 
-```
-core/               # C++ tools: xfs_scan, btrfs_scan, reconstruct_csv, recover_csv
-scripts/            # Build and demo scripts (Ubuntu TTY, offline)
-tests/              # Test images, fixtures, and automated tests (future)
-docs/               # Additional technical docs
+```bash
+git clone https://github.com/YOUR_USERNAME/MetaRecoverX.git
+cd MetaRecoverX
 ```
 
-### High-Level Workflow (Ubuntu TTY, no internet)
+### Build the Project
 
-1. Acquire or reference a disk image (dd/ewf, etc.)
-2. Build low-level binaries: `scripts/setup.sh` (uses CMake if present; otherwise direct g++)
-3. Scan filesystem structures (CSV output):
-  - XFS: `./build/xfs_scan --image path/to/disk.img --format csv > artifacts/xfs_scan.csv`
-  - Btrfs: `./build/btrfs_scan --image path/to/disk.img --format csv > artifacts/btrfs_scan.csv`
-4. Reconstruct metadata (no jq required):
-  - `./build/reconstruct_csv --out artifacts/metadata.json --csv-out artifacts/metadata.csv artifacts/xfs_scan.csv artifacts/btrfs_scan.csv`
-5. Recover file contents: `./build/recover_csv --image path/to/disk.img --plan artifacts/metadata.csv --out recovered/`
-6. Export a report (CSV): `cp artifacts/metadata.csv report.csv`
-
-Try it quickly:
-
-```
+```bash
 chmod +x scripts/*.sh
-# Build all tools (offline)
 ./scripts/setup.sh
+```
 
-# Option A: Full offline pipeline on your disk image
-./scripts/metarecoverx.sh pipeline --image /path/to/disk.img
+This compiles C++17 binaries into `build/` (via CMake when available, falling back to direct `g++`):
 
-# Option B: Quick demo (creates a tiny dummy image)
+- `build/xfs_scan`
+- `build/btrfs_scan`
+- `build/reconstruct_csv`
+- `build/recover_csv`
+
+You can also build explicitly via:
+
+```bash
+./scripts/metarecoverx.sh build
+```
+
+---
+
+## How to Run
+
+MetaRecoverX supports three modes of operation:
+
+### 1. Quick Demo (Dummy Image — Sanity Check)
+
+Verify that the toolchain, wrapper script, and pipeline work end-to-end without touching a real device:
+
+```bash
+./scripts/metarecoverx.sh demo
+# or equivalently:
 ./scripts/run_demo.sh
 ```
 
-Notes for TTY/no-internet environments:
+**What the demo does:**
 
-- Only coreutils and a C++17 compiler are required. The scripts use: `dd`, `stat`, `sha256sum`, `readlink -f`/`realpath`.
-- If `realpath` is not present, the scripts fall back to `readlink -f`.
-- If CMake is missing, the build script falls back to direct `g++` compilation.
+1. Creates a small zero-filled `dummy.img` if it does not already exist
+2. Runs acquisition on `dummy.img` (writes `artifacts/acquire.json`)
+3. Runs XFS and Btrfs scanners (`artifacts/xfs_scan.csv`, `artifacts/btrfs_scan.csv`)
+4. Reconstructs metadata (`artifacts/metadata.json`, `artifacts/metadata.csv`)
+5. Runs recovery engine (recovered files contain only zeros)
+6. Copies `artifacts/metadata.csv` to `report.csv`
 
-### Windows users (WSL recommended)
+Inspect the result:
 
-The scripts are POSIX shell-based and rely on coreutils. The simplest way to run end-to-end on Windows is via WSL (Ubuntu):
-
-1) Install WSL with Ubuntu from the Microsoft Store (one-time).
-
-2) Open an Ubuntu terminal and navigate to this project folder. If the repo lives on C:, it will be under `/mnt/c/...`, for example:
-
-```
-cd /mnt/c/Users/Mayank\ Tak/Desktop/btrfs
+```bash
+column -t -s, report.csv | head
 ```
 
-3) Run the same offline steps:
+### 2. Full Pipeline on an Existing Disk Image
 
+If you already have a raw disk image:
+
+```bash
+./scripts/metarecoverx.sh pipeline --image /path/to/disk.img
 ```
+
+This performs, in order:
+
+1. Build tools (if needed)
+2. Acquire metadata for the image (`artifacts/acquire.json`)
+3. Run XFS and Btrfs scans → CSVs in `artifacts/`
+4. Reconstruct unified metadata → `artifacts/metadata.csv` + `artifacts/metadata.json`
+5. Recover file data → `recovered/`
+6. Copy `artifacts/metadata.csv` → `report.csv`
+
+### 3. Forensic Pipeline on a USB Pendrive
+
+This workflow acquires a forensic image from a USB device, verifies its hash, scans supported filesystems, reconstructs metadata, and recovers files.
+
+#### Step 1: Detect USB Devices
+
+```bash
+./scripts/detect_usb.sh
+# or through the wrapper:
+sudo ./scripts/metarecoverx.sh detect-usb
+```
+
+Example output:
+
+```text
+NAME  TRAN  SIZE
+sdb   usb   32G
+sdc   usb   64G
+```
+
+**⚠️ Double-check that you have identified the correct source device; choosing the wrong one may destroy data.**
+
+#### Step 2: Run USB Forensic Recovery
+
+```bash
+sudo ./scripts/metarecoverx.sh pipeline-usb --device /dev/sdb
+```
+
+**USB recovery workflow (automatic):**
+
+1. Build C++ tools (if not already built)
+2. Acquire forensic image via `dd`:
+   - `dd if=/dev/sdb of=artifacts/usb_sdb_YYYYMMDD_HHMMSS.img bs=4M status=progress conv=sync`
+3. Compute SHA-256 hash → `artifacts/hash.txt`
+4. Write acquisition metadata → `artifacts/acquire.json`
+5. Detect filesystem type via `blkid`:
+   - `xfs` → run `xfs_scan`
+   - `btrfs` → run `btrfs_scan`
+   - Unknown → run both scanners
+6. Scan filesystem metadata → `artifacts/xfs_scan.csv`, `artifacts/btrfs_scan.csv`
+7. Reconstruct combined metadata → `artifacts/metadata.csv`, `artifacts/metadata.json`
+8. Recover files → `recovered/`
+9. Copy `artifacts/metadata.csv` → `report.csv`
+
+### 4. Interactive TTY Menu
+
+For bare-metal Ubuntu TTYs, use the key-driven menu:
+
+```bash
+./scripts/menu.sh
+```
+
+Menu options:
+
+- `1` — Detect USB storage devices
+- `2` — Run the demo pipeline on `dummy.img`
+- `q` — Quit
+
+---
+
+## Direct Scanner and Recovery Usage (Advanced)
+
+Advanced users can call the binaries directly for low-level testing or custom workflows.
+
+### XFS Scanner
+
+```bash
+build/xfs_scan --image /path/to/disk.img --format csv > artifacts/xfs_scan.csv
+```
+
+### Btrfs Scanner
+
+```bash
+build/btrfs_scan --image /path/to/disk.img --format csv > artifacts/btrfs_scan.csv
+```
+
+### Reconstruct Metadata from CSVs
+
+```bash
+build/reconstruct_csv \
+  --out artifacts/metadata.json \
+  --csv-out artifacts/metadata.csv \
+  artifacts/xfs_scan.csv artifacts/btrfs_scan.csv
+```
+
+### Recover Files from Reconstructed Metadata
+
+```bash
+build/recover_csv \
+  --image /path/to/disk.img \
+  --plan artifacts/metadata.csv \
+  --out recovered
+```
+
+---
+
+## CSV Metadata Format
+
+### Scanner Output Format
+
+```text
+fs,inode,path,size,uid,gid,mode,extents
+```
+
+Example:
+
+```text
+xfs,10231,/home/user/file.txt,20480,1000,1000,644,8192:20480
+btrfs,256,/documents/report.pdf,51200,1000,1000,644,16384:51200
+```
+
+### Unified Metadata (after `reconstruct_csv`)
+
+```text
+global_id,fs,path,size,uid,gid,mode,extents,recovery_plan
+xfs-10231,xfs,/home/user/file.txt,20480,1000,1000,644,8192:20480,carve
+btrfs-256,btrfs,/documents/report.pdf,51200,1000,1000,644,16384:51200,carve
+```
+
+---
+
+## Output Structure
+
+After a successful pipeline run (demo, disk image, or USB):
+
+```text
+artifacts/
+  acquire.json        — acquisition metadata (image path, size, hash)
+  hash.txt            — SHA-256 of the acquired image (USB pipeline)
+  xfs_scan.csv        — XFS filesystem metadata
+  btrfs_scan.csv      — Btrfs filesystem metadata
+  metadata.csv        — unified metadata (all filesystems)
+  metadata.json       — same metadata in JSON format
+
+recovered/
+  file.txt            — recovered file (filename preserved)
+  photo.jpg           — recovered file (filename preserved)
+  file_0001.bin       — recovered file (filename unknown)
+
+report.csv            — copy of metadata.csv for quick inspection
+```
+
+---
+
+## Scanner Implementation Details
+
+### Scanner Requirements
+
+All scanners must:
+
+- Read raw disk images directly (no mount required)
+- Support large images (>100 GB) using `uint64_t` offsets
+- Scan blocks sequentially
+- Use only C++17 standard library + POSIX APIs
+
+Example read pattern:
+
+```cpp
+uint64_t offset = 0;
+const uint64_t block_size = 4096;
+
+while (offset < image_size) {
+    image.seekg(offset);
+    char buffer[4096];
+    image.read(buffer, 4096);
+    // scan metadata structures
+    offset += block_size;
+}
+```
+
+### XFS Scanner Internals
+
+`xfs_scan.cpp` parses:
+
+- XFS inode structures
+- Directory entries:
+
+```cpp
+struct xfs_dir2_data_entry {
+    uint64_t inode;
+    uint8_t  namelen;
+    char     name[];
+};
+```
+
+Extracts: inode number, filename, path, size, uid, gid, mode, extents.
+
+### Btrfs Scanner Internals
+
+`btrfs_scan.cpp` traverses:
+
+- ROOT_TREE, FS_TREE
+- INODE_ITEM, INODE_REF, DIR_ITEM
+
+Extracts: inode number, filename, path, size, uid, gid, mode.
+
+---
+
+## Windows Users (WSL Recommended)
+
+The scripts are POSIX shell-based and rely on coreutils. The simplest way to run on Windows is via WSL (Ubuntu):
+
+1. Install WSL with Ubuntu from the Microsoft Store (one-time).
+2. Open an Ubuntu terminal and navigate to the project folder:
+
+```bash
+cd /mnt/c/Users/YourName/Desktop/MetaRecoverX
+```
+
+3. Run the same offline steps:
+
+```bash
 chmod +x scripts/*.sh
 ./scripts/setup.sh
 ./scripts/metarecoverx.sh pipeline --image /mnt/c/Path/To/disk.img
 ```
 
-Native Windows (without WSL) is not officially supported by the shell scripts. The C++ tools can still be built with CMake + MSVC, but you’ll need to run the binaries directly and perform hashing (`sha256`) yourself or via PowerShell.
+Native Windows (without WSL) is not officially supported by the shell scripts. The C++ tools can be built with CMake + MSVC, but you'll need to run the binaries directly.
 
-### Troubleshooting
+---
 
-- “realpath/readlink not found”: The script will try both and fall back gracefully. You can proceed.
-- “CMake not found”: The build falls back to direct `g++` compilation automatically.
-- Permission denied: Ensure you’re running from a writable directory and that the `scripts/*.sh` files are executable.
-- Binary locations: Binaries are written to `build/`. Some generators (CMake/MSVC) may create `build/Release/` — the wrapper accounts for that by calling `scripts/build.sh` and then referencing `build/` outputs.
+## Safety and Forensic Best Practices
 
-## Project Plan and Milestones (2025)
+- **Never** run `pipeline-usb`, `dd`, or any destructive command against a device unless you are absolutely certain it is the correct source device.
+- Prefer working on **read-only clones or images** of evidence media rather than original devices.
+- Keep MetaRecoverX machines **offline** when used in forensic workflows (no network connectivity required).
+- **Verify hashes** (`artifacts/hash.txt`) before and after copying images between systems.
 
-Dates reflect the academic plan and are subject to refinement during implementation.
+---
 
-- Sep 10–20: Btrfs tree traversal prototype; metadata pipeline outline
-- Sep 20–25: Requirements finalized; select sample datasets
-- Sep 25–30: Disk image acquisition process finalized
-- Oct 1–2: XFS superblock and AG parser drafted and validated
-- Oct 5–10: Deleted inode detection and carving (XFS)
-- Oct 10–18: Integrate metadata pipeline; timestamps/UID/GID recovery
-- Oct 15–20: Btrfs deleted file and snapshot detection
-- Oct 20–25: Integrate Btrfs with recovery engine; QA on multiple images
-- Oct 31: Integrate XFS modules; optimize carving and scanning performance
-- Nov 7–20: Reporting (HTML/CSV), performance tuning, packaging, and final QA
+## Troubleshooting
 
-## Team
+| Problem | Solution |
+|---|---|
+| `realpath`/`readlink` not found | Script tries both and falls back gracefully |
+| CMake not found | Build falls back to direct `g++` compilation automatically |
+| Permission denied | Ensure scripts are executable (`chmod +x scripts/*.sh`) and directory is writable |
+| Binary not found in `build/` | Some CMake generators create `build/Release/`; the wrapper accounts for this |
+| USB device not listed | Ensure device is connected; run `lsblk` manually to verify |
 
-- Mayank Tak (22ESKIT093) — Lead developer; XFS module and reporting
-- Lucky Panchal (22ESKIT088) — Btrfs module; testing and integration
-- Milan Kumar (22ESKIT094) — Metadata reconstruction; QA and tooling
+---
 
-Mentors / Faculty:
+## Project Milestones (2025)
 
-- Mr. Jagendra Singh Chaudhary — Assistant Professor (II)
-- Ms. Richa Rawal — Assistant Professor (I)
+| Date Range | Milestone |
+|---|---|
+| Sep 10–20 | Btrfs tree traversal prototype; metadata pipeline outline |
+| Sep 20–25 | Requirements finalized; select sample datasets |
+| Sep 25–30 | Disk image acquisition process finalized |
+| Oct 1–2 | XFS superblock and AG parser drafted and validated |
+| Oct 5–10 | Deleted inode detection and carving (XFS) |
+| Oct 10–18 | Integrate metadata pipeline; timestamps/UID/GID recovery |
+| Oct 15–20 | Btrfs deleted file and snapshot detection |
+| Oct 20–25 | Integrate Btrfs with recovery engine; QA on multiple images |
+| Oct 31 | Integrate XFS modules; optimize carving and scanning performance |
+| Nov 7–20 | Reporting (HTML/CSV), performance tuning, packaging, and final QA |
 
-## Status
+---
 
-- As of 2025-11-03: Offline C++ stubs for `xfs_scan` and `btrfs_scan` plus `reconstruct_csv` and `recover_csv` are available. Python/Rust/jq dependencies removed to support no-internet TTY operation.
+## Future Improvements
 
-## Contributing
+- Snapshot recovery (Btrfs)
+- Advanced carving heuristics
+- HTML forensic reports
+- Performance optimizations
+- Support for additional filesystems
 
-For academic evaluation and internal collaboration within SKIT. External contributions will be considered once the core modules are open-sourced. Please open issues for clarifications or to propose enhancements.
+---
 
 ## License
 
-TBD. A permissive open-source license (e.g., MIT/Apache-2.0) is planned post-initial evaluation.
+License will be added after academic evaluation. Planned: MIT License or Apache 2.0.
+
+---
 
 ## Acknowledgements
 
-Thanks to SKIT Jaipur IT Department for guidance and infrastructure support. Sample disk images will be credited as sources upon publication.
-
-Here is the full text from the document:
-
---- PAGE 1 ---
-
-SKIT आवले समय Swami Keshvanand Institute Of Technology, Management & Gramothan, Jaipur Department of Information Technology, Session 2025-2026 Meta RecoverX "Recovery of Deleted Data and Associate Metadata from XFS and Btrfs Filesystems" Abstract This project introduces MetaRecoverX, a data recovery and analysis system developed to retrieve deleted files and their associated metadata from XFS and Btrfs filesystems. The system focuses on the recovery of lost information by scanning low-level filesystem structures, including inodes, allocation groups, and metadata logs. MetaRecoverX ensures accurate reconstruction of deleted data along with critical metadata such as timestamps, ownership details, and directory hierarchy. The tool is designed to assist digital forensic experts and system administrators in recovering essential data for investigative and administrative purposes. By implementing efficient scanning algorithms and metadata analysis, the project enhances reliability and precision in the recovery of data from modern Linux-based storage systems. Key Words Data Recovery Metadata Reconstruction XFS and Btrfs Filesystems Deleted File Analysis Linux-Based Storage Systems Team Name: Tech-Aizen Team Members: Mentor: Lab Coordinator:
-
-Mayank Tak (22ESKIT093)
-
-Lucky Panchal (22ESKIT088)
-
-Milan Kumar (22ESKIT094) (Assistant Professor-2) Mr. Jagendra Singh Chaudhary Ms. Richa Rawal (Assistant Professor-1)
-
---- PAGE 2 ---
-
-MAJOR / MINOR PROJECT ABSTRACT [Form - 1] (YEAR - 2025-26) NAME OF LAB COORDINATOR: TITLE OF PROJECT: Ms. Richa Rawal (Assistant Professor-1) Meta Recover X: Recovery of Deleted data 4 associated metadata from PROJECT TRACK: (Tick the appropriate one / ones)
-
-The following table: "☑
-
-R&D (Innovation) ","2. CONSULTANCY 3 STARTUP
-
-(Fetched from Industry)
-
-(Self-Business Initiative) ","4. PROJECT POOL
-
-(From IBM/INFOSYS) ","5. HARDWARE
-
-/EMBEDDED "
-
-XFS 4 Btrfs filesysterms. BRIEF INTRODUCTION OF PROJECT: Meta Recoverx is a Linux-based tool designed to recover deleted files 4 reconstruct their metadata prom xrs 4 Btrfs filesystems. It scams low level structures like lodes, allocation groups, and metadata lags to restore lost data along with timestamps, ownership, and directory TOOLS/TECHNOLOGIES TO BE USED: Letails.
-
-The following table: "NAME OF TOOL/TECHNOLOGY ","VERSION ","SOFTWARE/ HARDWARE ","PURPOSE OF USE " " c++ (libxfs)
-
-Python
-
-Rust ","GLE
-
-3.12+
-
-Latest ","Linux
-
-Linux
-
-Linux ","Filesystem pansing & low-leurd recovery Metadata reconstruction & reporting Performance critical recovery modules " "Sample disk images ","NA ","Test disks ","validation and QA "
-
-PROPOSED PROJECT MODULES:
-
-The following table: "NAME OF MODULE ","PROPOSED FUNCTIONALITY IN PROJECT " "Dick Image Acquisition " "XFS Scanner
-
-Btrfs Scammer
-
-Metadata Reconstruction
-
-Recovery
-
-Engine ","Acquire disk lisk images, hosh verification Scan XFS intemnals enumerate Leleted extents Siam Btrfs tree structures, find deleted items Restore timestamps, directory path, /G/O Reassemble files from extents, verify integrity "
-
-TEAM MEMBER DETAILS:
-
-The following table: "STUDENT NAME ","CLASS & GROUP ","MOBILE No. ","EXPERTISE AREA ","ROLE IN PROJECT " "Mayank
-
-Tak
-
-Lucky Panchal
-
-Milan
-
-Kumar ","B.Tech IT B.Tech IT B.Tech IT
-
-","9214364918 Python
-
-8619276148 ","7597286684 Filesystem internals tooling
-
-Btrfs concepts, QA ","Lead developer, XFS module , reporting
-
-metadata
-
-Blrfs module testing "
-
-NOTE: 1. This form is to be submitted by a team of maximum 4 students in the starting of semester to lab coordinator. 2. Students must keep a Xerox copy of this form as reference for project work and attach it to final report.
-
---- PAGE 3 ---
-
-ROLE SPECIFICATION OF TEAM MEMBERS [Form - 2]
-
-The following table: "Mayank MEMBER 1
-
-NAME OF ACTIVITY ","Tak
-
-SOFT DEADLINE DATE ","HANDLING
-
-HARD DEADLINE DATE ","XFS scamnon, Recovery Engine MODULE DETAILS OF ACTIVITY (STORY) " "Resign XFS superblock, AG parsea ","20 Sept 2025 ","05 Oct 2025 ","Develop parser for XFS superblocks and allocation groups, enumerate structures. " "150ct 2025 Iomplemented deleted inode recovery & carving ",,"31 Oct 2025 ","Recover deleted inodes, carve files extends verify file integrity " ,,,"Metadata Instruction "
-
-. MEMBER 2 Panchal HANDLING MODULE
-
-The following table: "Lucky
-
-NAME OF ACTIVITY ","DETAILS OF ACTIVITY (STORY)
-
-HARD DEADLINE DATE
-
-SOFT DEADLINE DATE " "Metadata reconstruction pipdine ","Extract timestamps, UID / GID directory structure from recovered files
-
-os bit 2025
-
-20 Oct 2025 " "Develop reporting
-
-interface ","ment report export to Design & implement HTML / CSV & structured evidence. package. , QA
-
-1025
-
-20 Nov 2025
-
-Nov 2025 "
-
-HANDLING MODULE Btrfs Scanner
-
-The following table: "NAME OF ACTIVITY ","SOFT DEADLINE DATE ","HARD DEADLINE DATE ","DETAILS OF ACTIVITY (STORY) " "Implement Btrfs tree traversal ","10 Sep 2025 10 Oct 2025 ","20 Sep 2025 ","Traverse Btrfs chunk, extent, inode tree locate deleted files 4 snapshots. " "head quality assurance unit testing
-
-",,"25 Oct 2025 ","Test recovery on multiple disk. images, document anomalies, provide feedback. "
-
-MEMBER 3 Milan Kumar
-
-The following table: "MEMBER 4 ",,"HANDLING MODULE ", "NAME OF ACTIVITY ","SOFT DEADLINE DATE ","HARD DEADLINE DATE ","DETAILS OF ACTIVITY (STORY) "
-
-MENTOR'S NAME & SIGNATURE NOTE: 1. This form is to be submitted by a team of maximum 4 students in the starting of semester to lab coordinator. 2. Every member student must keep a Xerox copy of this form as reference for his/her part in project work. 3. Students must provide the detailed list of planned activities along with their completion deadline dates. 4. The lab coordinator will check the weekly progress of student against the information provided in this form.
-
---- PAGE 4 ---
-
-Form-3 PROJECT WEEKLY STATUS MATRIX (FOR PROJECT MENTORS) Mayank Tak NAME OF STUDENT - 1 NAME OF PROJECT Meta Recover-X
-
-The following table: "OTHER TEAM
-
-MEMBERS
-
-WORKING ON MODULE
-
-WEEK (TO-FROM)
-
-20 Sept 2025-Requirement 25 sept 2025 gathering ","2. Lucky Panchal
-
-PROGRESS ACHIEVED
-
-finalized requirements, selected sample dataset ","3. milan Kumar.
-
-COMMENTS
-
-Good st ","4.
-
-MARKS
-
-(X/10) "
-
-"25 Sept 2025- Disk image Developed disk innage 30 Sept 2025 acquisition acquisition process. Oct 2025-XFS superblock Drafted & validated 2 Oct 2025 4 AG parser superblock /AG parser ",,, ,,, "30ct 2025-Deleted inode detection 4 carving ","Implemented carving of deleted extents ",, "4 Oct 2025-Integration 5 2015 of XFS modules 060c4 2025-lerformance 10 Oct tuning & 4 15 Oct 2025 2017 31 Oct 2025 handling ","Tested integrated Scanning & recovery
-
-on images
-
-Improved carving Speed with optimized optimized algorithms ","
-
-","
-
-"
-
-"MODULE
-
-TOTAL ","OVERALL PROGRESS ","OVERALL COMMENT ","PERCENTAGE " "COMPLETED (YES/NO)
-
-WEEKS ","(POOR/AVG/GOOD) ","(POOR/AVG/GOOD) ","ESTIMATE
-
-MARKS "
-
-LAB COORDINATOR's remarks & Signature NOTE:1. This form is to be maintained in a file by lab coordinators for student - 1 of the team to track his/her progress. 2. Lab coordinators must cross check and evaluate the PROGRESS ACHIEVED + it's DOCUMENTATION by student against the work done by student and note their own comments about student's performance. 3. The lab coordinator must evaluate student's work for every lab from a score of 10 points. 4. The lab coordinator must compute average of these points at the end of semester to draw an estimate of the PERCENT MARKS to be awarded to the student for his/her performance. 5. The lab coordinator must IMMEDIATELY CONTACT MENTOR FACULTY of student in case of POOR PERFORMANCE or 2 CONTINUOUS ABSENCE from lab, 6. In case of absence, 00/10 MARKS will be awarded if the mentioned work is not presented in next lab by student
-
---- PAGE 5 ---
-
-Form-3 PROJECT WEEKLY STATUS MATRIX (FOR PROJECT MENTORS) NAME OF STUDENT - 2 Lucky Panchal NAME OF PROJECT Meta Recoverx
-
-The following table: "OTHER TEAM ","MEMBERS ","1. Mayank Tak ",,"Milan Kumar 3. ","4. " "WEEK (TO-FROM) ","WORKING ON MODULE ","PROGRESS ACHIEVED ",,"COMMENTS ","MARKS (X/10) " "05 Out 2025. Blofs tree 10 Out 2025 structure 10 Oct-15 Oct Study 2025 Btrfs 15 Oct-
-
-20 Oct 2025
-
-INOV 07 Nov 2025
-
-8 Nov- 15 Nov 2015
-
-16 Nov-
-
-20 Nov 2025 ","scanning module setup
-
-Deleted file detection
-
-Integration with recovery
-
-Performance Optimization ","Understood Btrfs chunk extent, inode trees.
-
-Developed initial Btrfs tree walker prototype
-
-Retected deleted Snapshots file extents
-
-Integrated recovered dete dete with main recovery engine
-
-Optimized tree traversal reduced scanning time ",",
-
-","
-
-","
-
-"
-
-"TOTAL WEEKS ","MODULE
-
-COMPLETED (YES/NO) ","OVERALL PROGRESS (POOR/AVG/GOOD) ",,"OVERALL COMMENT
-
-(POOR/AVG/GOOD) ","PERCENTAGE
-
-MARKS ESTIMATE "
-
-LAB COORDINATOR's remarks & Signature NOTE:1. This form is to be maintained in a file by lab coordinators for student - 2 of the team to track his/her progress. 2. Lab coordinators must cross check and evaluate the PROGRESS ACHIEVED + it's DOCUMENTATION by student against the work done by student and note their own comments about student's performance. 3. The lab coordinator must evaluate student's work for every lab from a score of 10 points. 4. The lab coordinator must compute average of these points at the end of semester to draw an estimate of the PERCENT MARKS to be awarded to the student for his / her performance. 5. The lab coordinator must IMMEDIATELY CONTACT MENTOR FACULTY of student in case of POOR PERFORMANCE or 2 CONTINUOUS ABSENCE from lab. 6. In case of absence, 00 / 10 MARKS will be awarded if the mentioned work is not presented in next lab by student
-
---- PAGE 6 ---
-
-Form-3 PROJECT WEEKLY STATUS MATRIX (FOR PROJECT MENTORS) NAME OF STUDENT - 3 Milan Kumar
-
-The following table: "NAME OF PROJECT ",,"Meta Recoverx ",, ,"OTHER TEAM MEMBERS ","1. Mayank Tak ","Lucky Panchal 2. ","4. " "WEEK (TO-FROM) ","WORKING ON MODULE ","PROGRESS ACHIEVED ","COMMENTS ","MARKS (X/10) " "10 Sep- 2025 12 sep
-
-12 Sep 2025- 15 sep 2025
-
-16 Sep- 20 sep 2025 ","Metadata pipeline ","Project planning set up Python and tooling outline reconstruction logic Implemented basic extermotion parsing of file metadata Timestamps Restored timestamps A VID/GIO and ownership from logs restore
-
-",, "10 Oct- 18 Oct 2025
-
-Oct- 25 oct 2025 TOTAL WEEKS
-
-","Integration with recovery engines
-
-inal testingd feedback
-
-MODULE
-
-COMPLETED (YES/NO) ","Connected metadata pipeline with file recovery routines Tested on diverse datasets, implemented user feedback.
-
-OVERALL PROGRESS
-
-(POOR/AVG/GOOD) ","OVERALL COMMENT
-
-(POOR/AVG/GOOD) ","PERCENTAGE
-
-MARKS ESTIMATE "
-
-LAB COORDINATOR's remarks & Signature NOTE:1. This form is to be maintained in a file by lab coordinators for student - 3 of the team to track his / her progress. 2. Lab coordinators must cross check and evaluate the PROGRESS ACHIEVED + it's DOCUMENTATION by student against the work done by student and note their own comments about student's performance. 3. The lab coordinator must evaluate student's work for every lab from a score of 10 points. 4. The lab coordinator must compute average of these points at the end of semester to draw an estimate of the PERCENT MARKS to be awarded to the student for his/her performance. 5. The lab coordinator must IMMEDIATELY CONTACT MENTOR FACULTY of student in case of POOR PERFORMANCE or 2 CONTINUOUS ABSENCE from lab. 6. In case of absence, 00/10 MARKS will be awarded if the mentioned work is not presented in next lab by student.#   c r m 
- 
- #   c r m 1 1 
- 
- 
+Special thanks to the Information Technology Department at SKIT Jaipur for academic guidance, infrastructure support, and project mentorship.
